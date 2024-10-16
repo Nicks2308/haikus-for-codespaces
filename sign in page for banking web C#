@@ -1,0 +1,130 @@
+using System;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Security.Cryptography;
+using System.Text;
+using System.Web.UI;
+
+namespace banking_web_appliaction_01
+//author : Nikhil sayen govender 
+//Date :29 August 2024
+{
+    public partial class sign_up_page : System.Web.UI.Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        protected void Button2_Click(object sender, EventArgs e)
+        {
+            // Redirect to the login page
+            Response.Redirect("Log in page.aspx");
+        }
+
+        protected void Button1_Click(object sender, EventArgs e)
+        {
+            // Retrieve input values from form controls
+            string email = txtEmail.Text.Trim();
+            string password = txtPassword.Text.Trim();
+            string fullName = txtFullName.Text.Trim();
+            string idNumber = txtIDNumber.Text.Trim();
+            string address = txtAddress.Text.Trim();
+            string contactDetails = txtContactDetails.Text.Trim();
+            string securityQuestion = txtSecurityQuestion.Text.Trim();
+            string securityAnswer = txtSecurityAnswer.Text.Trim();
+
+            // Basic validation
+            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(fullName) ||
+                string.IsNullOrEmpty(idNumber) || string.IsNullOrEmpty(address) ||
+                string.IsNullOrEmpty(securityQuestion) || string.IsNullOrEmpty(securityAnswer))
+            {
+                lblMessage.Text = "All fields are required except Contact Details.";
+                lblMessage.ForeColor = System.Drawing.Color.Blue;
+                return;
+            }
+
+            // Hash the password and security answer
+            string passwordHash = HashString(password);
+            string securityAnswerHash = HashString(securityAnswer);
+
+            // Connection string from Web.config
+            string connectionString = ConfigurationManager.ConnectionStrings["banking web serverConnectionString"].ConnectionString;
+
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+
+                // Check for existing customer by email or ID number
+                string checkQuery = "SELECT COUNT(*) FROM Customers WHERE Email = @Email OR IDNumber = @IDNumber";
+                using (SqlCommand checkCmd = new SqlCommand(checkQuery, conn))
+                {
+                    checkCmd.Parameters.AddWithValue("@Email", email);
+                    checkCmd.Parameters.AddWithValue("@IDNumber", idNumber);
+
+                    int existingCustomerCount = (int)checkCmd.ExecuteScalar();
+                    if (existingCustomerCount > 0)
+                    {
+                        lblMessage.Text = "A customer with this Email or ID Number already exists.";
+                        lblMessage.ForeColor = System.Drawing.Color.Red;
+                        return;
+                    }
+                }
+
+                // If no duplicates are found, proceed to insert the new customer
+                string query = "INSERT INTO Customers (Email, PasswordHash, FullName, IDNumber, Address, ContactDetails, SecurityQuestion, SecurityAnswerHash) " +
+                               "VALUES (@Email, @PasswordHash, @FullName, @IDNumber, @Address, @ContactDetails, @SecurityQuestion, @SecurityAnswerHash)";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    // Add parameters to the SQL command
+                    cmd.Parameters.AddWithValue("@Email", email);
+                    cmd.Parameters.AddWithValue("@PasswordHash", passwordHash);
+                    cmd.Parameters.AddWithValue("@FullName", fullName);
+                    cmd.Parameters.AddWithValue("@IDNumber", idNumber);
+                    cmd.Parameters.AddWithValue("@Address", address);
+
+                    // Handle ContactDetails: if empty, pass DBNull.Value
+                    if (string.IsNullOrEmpty(contactDetails))
+                    {
+                        cmd.Parameters.AddWithValue("@ContactDetails", DBNull.Value);
+                    }
+                    else
+                    {
+                        cmd.Parameters.AddWithValue("@ContactDetails", contactDetails);
+                    }
+
+                    cmd.Parameters.AddWithValue("@SecurityQuestion", securityQuestion);
+                    cmd.Parameters.AddWithValue("@SecurityAnswerHash", securityAnswerHash);
+
+                    try
+                    {
+                        cmd.ExecuteNonQuery();
+                        // Redirect to login page after successful signup
+                        Response.Redirect("Log in page.aspx");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Handle exceptions (e.g., log the error or show a message)
+                        lblMessage.Text = "An error occurred: " + ex.Message;
+                        lblMessage.ForeColor = System.Drawing.Color.Red;
+                    }
+                }
+            }
+        }
+
+        private string HashString(string input)
+        {
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+                StringBuilder builder = new StringBuilder();
+                foreach (byte b in bytes)
+                {
+                    builder.Append(b.ToString("x2"));
+                }
+                return builder.ToString();
+            }
+        }
+    }
+}
